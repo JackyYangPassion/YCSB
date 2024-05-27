@@ -146,6 +146,11 @@ LICENSE file.
     </dependency>
     <dependency>
       <groupId>site.ycsb</groupId>
+      <artifactId>hstore-binding</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>site.ycsb</groupId>
       <artifactId>ignite-binding</artifactId>
       <version>${project.version}</version>
     </dependency>
@@ -239,11 +244,11 @@ LICENSE file.
       <artifactId>scylla-binding</artifactId>
       <version>${project.version}</version>
     </dependency>
-    <dependency>
-      <groupId>site.ycsb</groupId>
-      <artifactId>solr7-binding</artifactId>
-      <version>${project.version}</version>
-    </dependency>
+<!--    <dependency>-->
+<!--      <groupId>site.ycsb</groupId>-->
+<!--      <artifactId>solr7-binding</artifactId>-->
+<!--      <version>${project.version}</version>-->
+<!--    </dependency>-->
     <dependency>
       <groupId>site.ycsb</groupId>
       <artifactId>tarantool-binding</artifactId>

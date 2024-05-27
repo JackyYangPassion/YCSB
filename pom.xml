@@ -179,6 +179,7 @@ LICENSE file.
     <module>griddb</module>
     <module>hbase1</module>
     <module>hbase2</module>
+    <module>hstore</module>
     <module>ignite</module>
     <module>infinispan</module>
     <module>jdbc</module>
@@ -198,7 +199,7 @@ LICENSE file.
     <module>s3</module>
     <module>seaweedfs</module>
     <module>scylla</module>
-    <module>solr7</module>
+<!--    <module>solr7</module>-->
     <module>tarantool</module>
     <module>tablestore</module>
     <module>voltdb</module>
