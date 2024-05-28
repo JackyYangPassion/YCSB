@@ -81,78 +81,54 @@ import static site.ycsb.workloads.CoreWorkload.ZERO_PADDING_PROPERTY_DEFAULT;
  */
 public class HstoreYCSBClient extends site.ycsb.DB {
   private static final Logger LOG = LoggerFactory.getLogger(HstoreYCSBClient.class);
-  private static final String KEY = "key";
-  private static final Status TIMEOUT = new Status("TIMEOUT", "The operation timed out.");
-  private static final int MAX_TABLETS = 9000;
-  private static final long DEFAULT_SLEEP = 60000;
   private static final int DEFAULT_NUM_CLIENTS = 1;
-  private static final int DEFAULT_NUM_REPLICAS = 3;
-  private static final String DEFAULT_PARTITION_SCHEMA = "hashPartition";
 
-  private static final String SYNC_OPS_OPT = "kudu_sync_ops";
-  private static final String BUFFER_NUM_OPS_OPT = "kudu_buffer_num_ops";
-  private static final String PRE_SPLIT_NUM_TABLETS_OPT = "kudu_pre_split_num_tablets";
-  private static final String TABLE_NUM_REPLICAS = "kudu_table_num_replicas";
-  private static final String BLOCK_SIZE_OPT = "kudu_block_size";
-  private static final String MASTER_ADDRESSES_OPT = "kudu_master_addresses";
-  private static final String NUM_CLIENTS_OPT = "kudu_num_clients";
-  private static final String PARTITION_SCHEMA_OPT = "kudu_partition_schema";
-
-  private static final int BLOCK_SIZE_DEFAULT = 4096;
-  private static final int BUFFER_NUM_OPS_DEFAULT = 2000;
-  private static final List<String> COLUMN_NAMES = new ArrayList<>();
-
+  private static final String PD_ADDRESSES = "pd_addresses";
+  private static final String DEFAULT_PD_ADDRESSES = "127.0.0.1:8686";
 
   public static final String VETEX_TABLE_NAME = "g+v";
   public static final String OUT_EDGE_TABLE_NAME = "g+oe";
   public static final String IN_EDGE_TABLE_NAME = "g+ie";
 
+
+
+
   private static List<HgStoreClient> clients = new ArrayList<>();
   private static int clientRoundRobin = 0;
   private static boolean tableSetup = false;
-  //private KuduClient client;
-  //private Schema schema;
   private String tableName;
-  //private KuduSession session;
-  //private KuduTable kuduTable;
-
-
-
-
   private HgStoreClient storeClient;
   private PDClient pdClient;
   private HgStoreSession graph;
-
-
   private String partitionSchema;
+  private String pd_addresses_list;
   private int zeropadding;
   private boolean orderedinserts;
 
   @Override
   public void init() throws DBException {
     Properties prop = getProperties();
-    this.tableName = prop.getProperty(TABLENAME_PROPERTY, TABLENAME_PROPERTY_DEFAULT);
-    this.partitionSchema = prop.getProperty(PARTITION_SCHEMA_OPT, DEFAULT_PARTITION_SCHEMA);
+    this.tableName = prop.getProperty(TABLENAME_PROPERTY, TABLENAME_PROPERTY_DEFAULT);//通过参数设置压测表名
+
     this.zeropadding = Integer.parseInt(prop.getProperty(ZERO_PADDING_PROPERTY, ZERO_PADDING_PROPERTY_DEFAULT));
     if (prop.getProperty(INSERT_ORDER_PROPERTY, INSERT_ORDER_PROPERTY_DEFAULT).compareTo("hashed") == 0) {
       this.orderedinserts = false;
     } else {
       this.orderedinserts = true;
     }
+
+    this.pd_addresses_list = prop.getProperty(PD_ADDRESSES,DEFAULT_PD_ADDRESSES);
+
+
     initClient();
 
-    PDConfig pdConfig =
-        PDConfig.of("127.0.0.1:8686")
-                .setEnableCache(true);
+    PDConfig pdConfig = PDConfig.of(this.pd_addresses_list)
+                                .setEnableCache(true);
     this.pdClient = PDClient.create(pdConfig);
-
-
 
     this.storeClient = HgStoreClient.create(pdClient);// 创建 HStoreClient
 
-
-
-    this.graph = storeClient.openSession("hugegraph/g");
+    this.graph = storeClient.openSession("hugegraph/g");//并发使用哪个session or storeClient
 
 
   }
@@ -162,22 +138,22 @@ public class HstoreYCSBClient extends site.ycsb.DB {
    * clients.
    */
   private void initClients() throws DBException {
-    synchronized (HstoreYCSBClient.class) {
-      if (!clients.isEmpty()) {
-        return;
-      }
-
-      Properties prop = getProperties();
-
-      String masterAddresses = prop.getProperty(MASTER_ADDRESSES_OPT,
-                                                "localhost:7051");
-      LOG.debug("Connecting to the masters at {}", masterAddresses);
-
-      int numClients = getIntFromProp(prop, NUM_CLIENTS_OPT, DEFAULT_NUM_CLIENTS);
-      for (int i = 0; i < numClients; i++) {
-        clients.add( HgStoreClient.create(pdClient));
-      }
-    }
+//    synchronized (HstoreYCSBClient.class) {
+//      if (!clients.isEmpty()) {
+//        return;
+//      }
+//
+//      Properties prop = getProperties();
+//
+//      String masterAddresses = prop.getProperty(MASTER_ADDRESSES_OPT,
+//                                                "localhost:7051");
+//      LOG.debug("Connecting to the masters at {}", masterAddresses);
+//
+//      int numClients = getIntFromProp(prop, NUM_CLIENTS_OPT, DEFAULT_NUM_CLIENTS);
+//      for (int i = 0; i < numClients; i++) {
+//        clients.add( HgStoreClient.create(pdClient));
+//      }
+//    }
   }
 
   private void initClient() throws DBException {
@@ -330,16 +306,21 @@ public class HstoreYCSBClient extends site.ycsb.DB {
                      int recordcount,
                      Set<String> fields,
                      Vector<HashMap<String, ByteIterator>> result) {
-    HgKvIterator<HgKvEntry> iterator = null;
-    iterator = graph.scanIterator(OUT_EDGE_TABLE_NAME);
 
+    HgOwnerKey startkey1 = HgOwnerKey.of(toBytes(startkey), toBytes(startkey));
 
+    HgKvIterator<HgKvEntry> iterator = graph.scanIterator(table,startkey1);
+
+    int num = 0;
     while (iterator.hasNext()) {
+      num ++;
       HgKvEntry entry = iterator.next();
       byte[] keyFromHStore = entry.key();
       byte[] valueFromHStore = entry.value();
 
-      //System.out.println("key: "+ toStr(keyFromHStore)+"  value: "+toStr(valueFromHStore));
+      if(num >= recordcount){
+        break;
+      }
     }
     return Status.OK;
   }
@@ -370,7 +351,7 @@ public class HstoreYCSBClient extends site.ycsb.DB {
   @Override
   public Status update(String table, String key, Map<String, ByteIterator> values) {
     HgOwnerKey key1 = HgOwnerKey.of(toBytes(key), toBytes(key));
-    graph.put(OUT_EDGE_TABLE_NAME, key1, values.toString().getBytes());
+    graph.put(table, key1, values.toString().getBytes());
 
     return Status.OK;
   }
@@ -379,7 +360,7 @@ public class HstoreYCSBClient extends site.ycsb.DB {
   public Status insert(String table, String key, Map<String, ByteIterator> values) {
 
     HgOwnerKey key1 = HgOwnerKey.of(toBytes(key), toBytes(key));
-    graph.put(OUT_EDGE_TABLE_NAME, key1, values.toString().getBytes());
+    graph.put(table, key1, values.toString().getBytes());
 
     return Status.OK;
   }
@@ -388,8 +369,8 @@ public class HstoreYCSBClient extends site.ycsb.DB {
   public Status delete(String table, String key) {
 
     HgOwnerKey key1 = HgOwnerKey.of(toBytes(key), toBytes(key));
-    graph.delete(OUT_EDGE_TABLE_NAME, key1);
-    graph.delete(IN_EDGE_TABLE_NAME, key1);
+    graph.delete(table, key1);
+    graph.delete(table, key1);
 
     return Status.OK;
   }
